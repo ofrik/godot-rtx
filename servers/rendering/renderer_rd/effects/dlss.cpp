@@ -487,6 +487,8 @@ void DLSSEffect::_upscale_internal(RDD::CommandBufferID cmdid, const DLSSContext
 		context->constants.motionVectors3D = sl::Boolean::eFalse;
 		context->constants.motionVectorsDilated = sl::Boolean::eFalse;
 		context->constants.motionVectorsJittered = sl::Boolean::eFalse;
+		// Checked 2026-10-06 against flipped and halved variants on swaying
+		// foliage: these conventions are the calmest (jitter flipped tripled it).
 		context->constants.jitterOffset = sl::float2(p_params.jitter.x, p_params.jitter.y);
 		context->constants.mvecScale = sl::float2(1.0f, 1.0f);
 		context->constants.orthographicProjection = sl::Boolean::eFalse;
