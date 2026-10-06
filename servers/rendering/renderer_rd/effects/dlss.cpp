@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "dlss.h"
+#include "core/os/os.h"
 
 #ifdef STREAMLINE_ENABLED
 #define ENABLE_DLSS 1
@@ -145,8 +146,40 @@ public:
 static Vector<unsigned int> g_dlss_freeViewportIndices;
 static unsigned int g_dlss_viewportIndex = 1;
 
+// A destroyed context's Streamline viewport, released once the frames that
+// may still use it on the GPU are done. Reusing a viewport id without
+// slFreeResources kept DLSS at the old resolution: after a render-scale or
+// window change the output went black or froze on an early frame.
+struct DLSSRetiredViewport {
+	unsigned int viewport;
+	int frames_left;
+};
+static Vector<DLSSRetiredViewport> g_dlss_retired;
+static constexpr int DLSS_RETIRE_FRAMES = 4;
+
+static void dlss_release_retired(bool p_all) {
+	for (int i = g_dlss_retired.size() - 1; i >= 0; i--) {
+		DLSSRetiredViewport &r = g_dlss_retired.write[i];
+		if (!p_all && --r.frames_left > 0) {
+			continue;
+		}
+		if (StreamlineContext::get().slFreeResources != nullptr) {
+			sl::ViewportHandle vp(r.viewport);
+			StreamlineContext::get().slFreeResources(sl::kFeatureDLSS, vp);
+			if (StreamlineContext::get().streamline_capabilities.dlss_rr_available) {
+				StreamlineContext::get().slFreeResources(sl::kFeatureDLSS_RR, vp);
+			}
+			if (StreamlineContext::get().streamline_capabilities.nis_available) {
+				StreamlineContext::get().slFreeResources(sl::kFeatureNIS, vp);
+			}
+		}
+		g_dlss_freeViewportIndices.push_back(r.viewport);
+		g_dlss_retired.remove_at(i);
+	}
+}
+
 DLSSContextInner::~DLSSContextInner() {
-	g_dlss_freeViewportIndices.push_back((unsigned int)viewport);
+	g_dlss_retired.push_back({ (unsigned int)viewport, DLSS_RETIRE_FRAMES });
 }
 
 DLSSContextInner::DLSSContextInner() {
@@ -208,6 +241,14 @@ static sl::float3 sl_convert_vector(const Vector3 &vec) {
 void DLSSEffect::upscale(const DLSSContext::Parameters &p_params) {
 	DLSSContextInner *context = (DLSSContextInner *)p_params.context;
 
+	// Once a frame: free the Streamline resources of contexts retired a few frames ago.
+	static uint64_t last_release_frame = UINT64_MAX;
+	uint64_t frame = RD::get_singleton()->get_frames_drawn();
+	if (frame != last_release_frame) {
+		last_release_frame = frame;
+		dlss_release_retired(false);
+	}
+
 	// Delay enablement
 	if (context->delay > 0) {
 		--context->delay;
@@ -226,6 +267,10 @@ void DLSSEffect::upscale(const DLSSContext::Parameters &p_params) {
 
 	context->last_parameters = p_params;
 	context->last_effect = this;
+	if (OS::get_singleton()->get_environment("SL_TRACE") == "1") { // TRACE
+		fprintf(stderr, "DLSS upscale frame %llu ctx %p vp %u internal %dx%d token %p\n", (unsigned long long)RD::get_singleton()->get_frames_drawn(), (void *)context, (unsigned int)context->viewport, p_params.internal_size.x, p_params.internal_size.y, (void *)StreamlineContext::get().last_token); // TRACE
+		fflush(stderr); // TRACE
+	} // TRACE
 
 	// Decode mvecs
 	{

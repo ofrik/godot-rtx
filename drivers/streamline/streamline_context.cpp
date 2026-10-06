@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "streamline_context.h"
+#include "core/os/os.h"
 
 #ifdef STREAMLINE_ENABLED
 #ifdef _WIN32
@@ -363,7 +364,18 @@ void StreamlineContext::initialize(bool d3d12) {
 	pref.applicationId = 0x90d07004;
 	pref.flags = sl::PreferenceFlags::eAllowOTA | sl::PreferenceFlags::eLoadDownloadedPlugins | sl::PreferenceFlags::eDisableCLStateTracking;
 
-	if (bool(GLOBAL_GET("rendering/streamline/streamline_log"))) {
+	if (OS::get_singleton()->get_environment("SL_LOG_STDERR") == "1") {
+		// Streamline's warnings and errors in the engine's own output, where a
+		// test run's log captures them (the console window does not).
+		pref.logLevel = sl::LogLevel::eDefault;
+		pref.showConsole = false;
+		pref.logMessageCallback = [](sl::LogType p_type, const char *p_msg) {
+			if (p_type != sl::LogType::eInfo) {
+				fprintf(stderr, "SL %s: %s", p_type == sl::LogType::eError ? "ERROR" : "WARN", p_msg);
+				fflush(stderr);
+			}
+		};
+	} else if (bool(GLOBAL_GET("rendering/streamline/streamline_log"))) {
 		pref.logLevel = sl::LogLevel::eVerbose;
 		pref.showConsole = true;
 	} else {
