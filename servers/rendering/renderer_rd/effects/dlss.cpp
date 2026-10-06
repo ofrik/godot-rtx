@@ -112,6 +112,9 @@ public:
 			}
 
 			sl::DLSSOptimalSettings &optimalSettings = settings[i];
+			if (OS::get_singleton()->get_environment("SL_TRACE") == "1") { // TRACE
+				fprintf(stderr, "DLSS mode %d out %ux%u optimal %ux%u min %ux%u max %ux%u want %ux%u\n", (int)modes[i], outputWidth, outputHeight, optimalSettings.optimalRenderWidth, optimalSettings.optimalRenderHeight, optimalSettings.renderWidthMin, optimalSettings.renderHeightMin, optimalSettings.renderWidthMax, optimalSettings.renderHeightMax, desiredWidth, desiredHeight); // TRACE
+			} // TRACE
 			if (desiredWidth >= optimalSettings.renderWidthMin &&
 					desiredWidth <= optimalSettings.renderWidthMax &&
 					desiredHeight >= optimalSettings.renderHeightMin &&

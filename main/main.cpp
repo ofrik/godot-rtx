@@ -5214,6 +5214,12 @@ bool Main::iteration() {
 #endif
 
 	if (fixed_fps != -1) {
+		// The frame token renews at the end of every iteration; a fixed-fps run
+		// (Movie Maker) returned before it, so every frame shared one token and
+		// Streamline rejected DLSS's constants as set twice in the same frame.
+		if (Streamline::get_singleton()) {
+			Streamline::get_singleton()->emit_marker(STREAMLINE_MARKER_BEFORE_MESSAGE_LOOP);
+		}
 		return exit;
 	}
 
